@@ -48,6 +48,13 @@ def sniffMessage():
 def sendMessage(destination, string):
     p = sr1(IP(dst=destination)/ICMP(type=0, id=1, seq=1)/string, timeout=0)
 
+def isAdmin():
+    try:
+        is_admin = (os.getuid() == 0)
+    except AttributeError:
+        is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+    return is_admin
+
 def recvFile(clientPath):
     print("recvFile | clientPath: "+clientPath)
     
@@ -90,6 +97,11 @@ def recvDirectory(clientPath):
     
 
 if __name__ == "__main__":
+    
+    if not isAdmin():
+        print("The script must be run as Administrator or root")
+        exit()
+    
     keepAliveThread = Thread(target = keepAlive)
     keepAliveThread.start()
 
